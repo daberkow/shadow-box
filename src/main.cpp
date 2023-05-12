@@ -138,26 +138,30 @@ void audio_to_leds() {
   if (result == ESP_OK) {
     // Read I2S data buffer
     int16_t samples_read = bytesIn / 8;
-    Serial.print("Data:");
+    // Serial.print("Data:");
     if (samples_read > 0) {
       for (int16_t i = 0; i < samples_read; i++) {
         if (sBuffer[i] < lowest_audio_seen) {
           lowest_audio_seen = sBuffer[i];
+          Serial.print("Adjusting lowest_audio_seen to: ");
+          Serial.println(lowest_audio_seen);
         }
         if (sBuffer[i] > highest_audio_seen) {
           highest_audio_seen = sBuffer[i];
+          Serial.print("Adjusting highest_audio_seen to: ");
+          Serial.println(highest_audio_seen);
         }
-        Serial.print(sBuffer[i]);
-        Serial.print(",");
+        // Serial.print(sBuffer[i]);
+        // Serial.print(",");
       }
-      Serial.println(",");
+      // Serial.println(",");
       int lastFullValue = 0;
       for (int k = 0; k < num_per_row; k++) {
         int range = (lowest_audio_seen * -1) + highest_audio_seen;
-        Serial.print("Range: ");
-        Serial.println(range);
-        Serial.print("lowest_audio_seen: ");
-        Serial.println(lowest_audio_seen);
+        // Serial.print("Range: ");
+        // Serial.println(range);
+        // Serial.print("lowest_audio_seen: ");
+        // Serial.println(lowest_audio_seen);
         float audioValue = 0;
         if (k % (num_per_row / samples_read) == 0) {
           if (sBuffer[k / (num_per_row / samples_read)] < 0) {
@@ -170,8 +174,19 @@ void audio_to_leds() {
           }
           lastFullValue = k;
         } else {
-          float lowerValue = ((sBuffer[lastFullValue / (num_per_row / samples_read)] / (-1 * lowest_audio_seen)) * BRIGHTNESS) / range;
-          float nextValue = ((sBuffer[(lastFullValue + (num_per_row / samples_read)) / (num_per_row / samples_read)] +  (-1 * lowest_audio_seen)) * BRIGHTNESS) / range;
+          float lowerValue = ((sBuffer[k / (num_per_row / samples_read)] * BRIGHTNESS) / (range / 2));
+          if (sBuffer[k / (num_per_row / samples_read)] < 0) {
+            // Negative value
+            lowerValue *= -1;
+          }
+
+          float nextValue = ((sBuffer[(lastFullValue + (num_per_row / samples_read)) / (num_per_row / samples_read)] * BRIGHTNESS) / (range / 2));
+          if (sBuffer[(lastFullValue + (num_per_row / samples_read)) / (num_per_row / samples_read)] < 0) {
+            // Negative value
+            nextValue *= -1;
+          }
+          // float lowerValue = ((sBuffer[lastFullValue / (num_per_row / samples_read)] / (-1 * lowest_audio_seen)) * BRIGHTNESS) / range;
+          // float nextValue = ((sBuffer[(lastFullValue + (num_per_row / samples_read)) / (num_per_row / samples_read)] +  (-1 * lowest_audio_seen)) * BRIGHTNESS) / range;
           float averageValue = 0;
           float total_size = (num_per_row / samples_read) / 2;
           for (int z = 0; z < (num_per_row / samples_read); z++) {
@@ -182,18 +197,21 @@ void audio_to_leds() {
             }
           }
           averageValue /= (num_per_row / samples_read);
-          // audioValue = averageValue;
+          audioValue = averageValue;
         }
 
-        Serial.print("Setting LED ");
-        Serial.print(k);
-        Serial.print(" to ");
-        Serial.println(audioValue);
+        // Serial.print("Setting LED ");
+        // Serial.print(k);
+        // Serial.print(" to ");
+        // Serial.println(audioValue);
         for (int l = 0; l < num_cols; l++) {
           int ledId = k + (l * num_per_row);
           if (l % 2 == 1) {
             // Odd rows are the reverse LED order
             ledId = (((l + 1) * num_per_row) - 1) - k;
+          }
+          if (audioValue < 10) {
+            audioValue = 0;
           }
           LEDs[ledId] = CRGB(audioValue, audioValue, audioValue);
         }
@@ -532,7 +550,7 @@ void loop() {
 
   // Changing Mode
   if (lastMode == mode) {
-    delay(100);
+    delay(50);
     return;
   }
 
