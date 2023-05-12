@@ -1,5 +1,18 @@
 #include <Arduino.h>
 
+boolean debug = false;
+void easy_debug(String val) {
+  if (debug) {
+    Serial.print(val);
+  }
+}
+
+void easy_debug_line(String val) {
+  if (debug) {
+    Serial.println(val);
+  }
+}
+
 // SD Card Libraries
 #include "FS.h"
 #include "SD.h"
@@ -7,24 +20,9 @@
 
 #define MODE_BUTTON 4
 
-// LED libraries
-// The WS2812 doesnt support this esp32 hardware spi
-#define FASTLED_FORCE_SOFTWARE_SPI
-#include <FastLED.h>
-#define RGB_PIN 26 // LED DATA PIN
-#define RGB_LED_NUM 256 // Number of LEDs
-#define BRIGHTNESS 100 // brightness range [0..255]
-#define CHIP_SET WS2812B // types of RGB LEDs
-#define COLOR_CODE GRB //sequence of colors in data stream
-// Define the array of LEDs
-CRGB LEDs[RGB_LED_NUM];
-// define 3 byte for the random color
-byte a, b, c;
-#define UPDATES_PER_SECOND 100
-char iByte = 0;
-
-
-// Audio libraries and settings
+/*********************
+* Audio libraries and settings
+**********************/
 // Include I2S driver
 #include <driver/i2s.h>
 
@@ -39,76 +37,6 @@ char iByte = 0;
 // Define input buffer length
 #define bufferLen 64
 int16_t sBuffer[bufferLen];
-
-// WIFI
-#include <WiFi.h>
-// #include "AsyncTCP.h"
-// #include "ESPAsyncWebServer.h"
-#include "SPIFFS.h"
-
-// Create AsyncWebServer object on port 80
-// AsyncWebServer server(80);
-
-// Search for parameter in HTTP POST request
-// const char* PARAM_INPUT_1 = "ssid";
-// const char* PARAM_INPUT_2 = "pass";
-// const char* PARAM_INPUT_3 = "ip";
-// const char* PARAM_INPUT_4 = "gateway";
-
-
-// //Variables to save values from HTML form
-// String ssid;
-// String pass;
-// String ip;
-// String gateway;
-
-// // File paths to save input values permanently
-// const char* ssidPath = "/ssid.txt";
-// const char* passPath = "/pass.txt";
-// const char* ipPath = "/ip.txt";
-// const char* gatewayPath = "/gateway.txt";
-
-// IPAddress localIP;
-//IPAddress localIP(192, 168, 1, 200); // hardcoded
-
-// Set your Gateway IP address
-// IPAddress localGateway;
-//IPAddress localGateway(192, 168, 1, 1); //hardcoded
-// IPAddress subnet(255, 255, 0, 0);
-
-// Timer variables
-// unsigned long previousMillis = 0;
-// const long interval = 10000;  // interval to wait for Wi-Fi connection (milliseconds)
-
-// Dep functions
-
-// LEDs
-// Blue, Green , Red
-void r_g_b() {
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB ( 0, 0, 255);
-    FastLED.show();
-    delay(50);
-  }
-  for (int i = RGB_LED_NUM; i >= 0; i--) {
-    LEDs[i] = CRGB ( 0, 255, 0);
-    FastLED.show();
-    delay(50);
-  }
-  for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB ( 255, 0, 0);
-    FastLED.show();
-    delay(50);
-  }
-  for (int i = RGB_LED_NUM; i >= 0; i--) {
-    LEDs[i] = CRGB ( 0, 0, 0);
-    FastLED.show();
-    delay(50);
-  }
-}
-
-
-// Mic
 void i2s_install() {
   // Set up I2S Processor configuration
   const i2s_config_t i2s_config = {
@@ -138,9 +66,151 @@ void i2s_setpin() {
   i2s_set_pin(I2S_PORT, &pin_config);
 }
 
-// WIFI
+
+/**********************
+* LEDs
+**********************/
+// The WS2812 doesnt support this esp32 hardware spi
+#define FASTLED_FORCE_SOFTWARE_SPI
+#include <FastLED.h>
+#define RGB_PIN 26 // LED DATA PIN
+#define RGB_LED_NUM 256 // Number of LEDs
+#define BRIGHTNESS 100 // brightness range [0..255]
+#define CHIP_SET WS2812B // types of RGB LEDs
+#define COLOR_CODE GRB //sequence of colors in data stream
+// Define the array of LEDs
+CRGB LEDs[RGB_LED_NUM];
+// define 3 byte for the random color
+byte a, b, c;
+#define UPDATES_PER_SECOND 100
+char iByte = 0;
+
+// Blue, Green , Red
+void r_g_b() {
+  for (int i = 0; i < RGB_LED_NUM; i++) {
+    LEDs[i] = CRGB ( 0, 0, 255);
+    FastLED.show();
+    delay(50);
+  }
+  for (int i = RGB_LED_NUM; i >= 0; i--) {
+    LEDs[i] = CRGB ( 0, 255, 0);
+    FastLED.show();
+    delay(50);
+  }
+  for (int i = 0; i < RGB_LED_NUM; i++) {
+    LEDs[i] = CRGB ( 255, 0, 0);
+    FastLED.show();
+    delay(50);
+  }
+  for (int i = RGB_LED_NUM; i >= 0; i--) {
+    LEDs[i] = CRGB ( 0, 0, 0);
+    FastLED.show();
+    delay(50);
+  }
+}
+
+void light_up_white() {
+  Serial.println("Lighting White");
+  for (int i = 0; i < RGB_LED_NUM; i++) {
+    LEDs[i] = CRGB( BRIGHTNESS, BRIGHTNESS, BRIGHTNESS);
+  }
+  FastLED.show();
+}
+
+void disable_all_led() {
+  Serial.println("Lighting White");
+  for (int i = 0; i < RGB_LED_NUM; i++) {
+    LEDs[i] = CRGB( 0, 0, 0);
+  }
+  FastLED.show();
+}
+
+int lowest_audio_seen = 0;
+int highest_audio_seen = 0;
+int num_per_row = 16;
+int num_cols = 16;
+
+void audio_to_leds() {
+  // Get I2S data and place in data buffer
+  size_t bytesIn = 0;
+  esp_err_t result = i2s_read(I2S_PORT, &sBuffer, bufferLen, &bytesIn, portMAX_DELAY);
+
+  if (result == ESP_OK) {
+    // Read I2S data buffer
+    int16_t samples_read = bytesIn / 8;
+    Serial.print("Data:");
+    if (samples_read > 0) {
+      for (int16_t i = 0; i < samples_read; i++) {
+        if (sBuffer[i] < lowest_audio_seen) {
+          lowest_audio_seen = sBuffer[i];
+        }
+        if (sBuffer[i] > highest_audio_seen) {
+          highest_audio_seen = sBuffer[i];
+        }
+        Serial.print(sBuffer[i]);
+        Serial.print(",");
+      }
+      Serial.println(",");
+      int lastFullValue = 0;
+      for (int k = 0; k < num_per_row; k++) {
+        int range = (lowest_audio_seen * -1) + highest_audio_seen;
+        Serial.print("Range: ");
+        Serial.println(range);
+        Serial.print("lowest_audio_seen: ");
+        Serial.println(lowest_audio_seen);
+        float audioValue = 0;
+        if (k % (num_per_row / samples_read) == 0) {
+          if (sBuffer[k / (num_per_row / samples_read)] < 0) {
+            // Negative value
+            // audioValue = ((sBuffer[k / (num_per_row / samples_read)] / (-1 * lowest_audio_seen)) * BRIGHTNESS);
+            audioValue = ((sBuffer[k / (num_per_row / samples_read)] * BRIGHTNESS) / ((range / 2) * -1));
+          } else {
+            // audioValue = ((sBuffer[k / (num_per_row / samples_read)] / highest_audio_seen) * BRIGHTNESS);
+            audioValue = ((sBuffer[k / (num_per_row / samples_read)] * BRIGHTNESS) / (range / 2));
+          }
+          lastFullValue = k;
+        } else {
+          float lowerValue = ((sBuffer[lastFullValue / (num_per_row / samples_read)] / (-1 * lowest_audio_seen)) * BRIGHTNESS) / range;
+          float nextValue = ((sBuffer[(lastFullValue + (num_per_row / samples_read)) / (num_per_row / samples_read)] +  (-1 * lowest_audio_seen)) * BRIGHTNESS) / range;
+          float averageValue = 0;
+          float total_size = (num_per_row / samples_read) / 2;
+          for (int z = 0; z < (num_per_row / samples_read); z++) {
+            if (z < total_size) {
+              averageValue += lowerValue;
+            } else {
+              averageValue += nextValue;
+            }
+          }
+          averageValue /= (num_per_row / samples_read);
+          // audioValue = averageValue;
+        }
+
+        Serial.print("Setting LED ");
+        Serial.print(k);
+        Serial.print(" to ");
+        Serial.println(audioValue);
+        for (int l = 0; l < num_cols; l++) {
+          int ledId = k + (l * num_per_row);
+          if (l % 2 == 1) {
+            // Odd rows are the reverse LED order
+            ledId = (((l + 1) * num_per_row) - 1) - k;
+          }
+          LEDs[ledId] = CRGB(audioValue, audioValue, audioValue);
+        }
+      }
+
+      FastLED.show();
+    }
+  }
+}
+
+/*********************
+* File System
+**********************/
 
 // Initialize SPIFFS
+#include "SPIFFS.h"
+
 void initSPIFFS() {
   if (!SPIFFS.begin(true)) {
     Serial.println("An error has occurred while mounting SPIFFS");
@@ -182,7 +252,49 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
   }
 }
 
-// Initialize WiFi
+/*********************
+* Wifi
+**********************/
+// WIFI
+#include <WiFi.h>
+// #include "AsyncTCP.h"
+// #include "ESPAsyncWebServer.h"
+
+
+// Create AsyncWebServer object on port 80
+// AsyncWebServer server(80);
+
+// Search for parameter in HTTP POST request
+// const char* PARAM_INPUT_1 = "ssid";
+// const char* PARAM_INPUT_2 = "pass";
+// const char* PARAM_INPUT_3 = "ip";
+// const char* PARAM_INPUT_4 = "gateway";
+
+
+// //Variables to save values from HTML form
+// String ssid;
+// String pass;
+// String ip;
+// String gateway;
+
+// // File paths to save input values permanently
+// const char* ssidPath = "/ssid.txt";
+// const char* passPath = "/pass.txt";
+// const char* ipPath = "/ip.txt";
+// const char* gatewayPath = "/gateway.txt";
+
+// IPAddress localIP;
+//IPAddress localIP(192, 168, 1, 200); // hardcoded
+
+// Set your Gateway IP address
+// IPAddress localGateway;
+//IPAddress localGateway(192, 168, 1, 1); //hardcoded
+// IPAddress subnet(255, 255, 0, 0);
+
+// Timer variables
+// unsigned long previousMillis = 0;
+// const long interval = 10000;  // interval to wait for Wi-Fi connection (milliseconds)
+
 // bool initWiFi() {
 //   if(ssid=="" || ip==""){
 //     Serial.println("Undefined SSID or IP address.");
@@ -230,7 +342,7 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
 //   return String();
 // }
 
-
+int mode = 1;
 
 void setup() {
   Serial.begin(115200);
@@ -381,38 +493,67 @@ void setup() {
   delay(500);
 }
 
+boolean trackingButton = false;
+int lastMode = 0;
+
 void loop() {
-  // LED
-  // r_g_b();
+  // Serial.print("Starting Loop, Mode: ");
+  // Serial.println(mode);
+  // Check if button is pressed
+  if (digitalRead(MODE_BUTTON) == LOW && trackingButton) {
+    trackingButton = false;
+  }
 
-  // Audio
-  // False print statements to "lock range" on serial plotter display
-  // Change rangelimit value to adjust "sensitivity"
-  int rangelimit = 3000;
-  Serial.print(rangelimit * -1);
-  Serial.print(" ");
-  Serial.print(rangelimit);
-  Serial.print(" ");
 
-  // Get I2S data and place in data buffer
-  size_t bytesIn = 0;
-  esp_err_t result = i2s_read(I2S_PORT, &sBuffer, bufferLen, &bytesIn, portMAX_DELAY);
+  if (digitalRead(MODE_BUTTON) == HIGH && !trackingButton) {
+    Serial.println("Changing Mode");
+    // Button just pressed
+    trackingButton = true;
 
-  if (result == ESP_OK) {
-    // Read I2S data buffer
-    int16_t samples_read = bytesIn / 8;
-    if (samples_read > 0) {
-      float mean = 0;
-      for (int16_t i = 0; i < samples_read; ++i) {
-        mean += (sBuffer[i]);
-      }
-
-      // Average the data reading
-      mean /= samples_read;
-
-      // Print to serial plotter
-      Serial.println(mean);
+    // Change mode if button pressed
+    if (mode == 4) {
+      mode = 1;
+    } else {
+      mode++;
     }
   }
-  delay(100);
+
+  // Functions for modes that need ations each loop
+  switch (mode) {
+    case 1:
+      // Mode 1 - Solid white
+      // No action needed
+      break;
+    case 2:
+      // Mode 2 - Audio
+      audio_to_leds();
+      break;
+  }
+
+  // Changing Mode
+  if (lastMode == mode) {
+    delay(100);
+    return;
+  }
+
+  Serial.print("Changing Mode");
+  Serial.println(mode);
+  switch (mode) {
+    case 1:
+      // Mode 1 - Solid white
+      light_up_white();
+      break;
+    case 2:
+      // Mode 2 - Audio
+      disable_all_led();
+      audio_to_leds();
+      break;
+  }
+  lastMode = mode;
+
+  // Mode 3 - Adhoc Wifi
+
+  // Mode 4 - Home kit
+
+  delay(500);
 }
