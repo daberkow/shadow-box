@@ -75,6 +75,7 @@ void i2s_setpin() {
 #include <FastLED.h>
 #define RGB_PIN 26 // LED DATA PIN
 #define RGB_LED_NUM 256 // Number of LEDs
+#define LEDS_PER_ROW 16 // brightness range [0..255]
 #define BRIGHTNESS 100 // brightness range [0..255]
 #define CHIP_SET WS2812B // types of RGB LEDs
 #define COLOR_CODE GRB //sequence of colors in data stream
@@ -85,25 +86,44 @@ byte a, b, c;
 #define UPDATES_PER_SECOND 100
 char iByte = 0;
 
+// Dans remapping
+int mappedLeds[RGB_LED_NUM];
+void map_leds() {
+  for (int i = 0; i < RGB_LED_NUM; i++) {
+    for (int i = 0; i < RGB_LED_NUM; i++) {
+      if ((i / LEDS_PER_ROW) % 2 == 1) {
+          // If the LED number (example 22) divided by the number of LEDS is odd then we are in one of these reverse LED rows
+          int maxId = (LEDS_PER_ROW * ((i / LEDS_PER_ROW) + 1));
+          int newId = maxId - i;
+          newId = (LEDS_PER_ROW * (i / LEDS_PER_ROW)) + newId;
+          // Since this counts from 0, we need to remove 1
+          mappedLeds[i] = newId - 1;
+      } else {
+          mappedLeds[i] = i;
+      }
+    }
+  }
+}
+
 // Blue, Green , Red
 void r_g_b() {
   for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB ( 0, 0, 255);
+    LEDs[mappedLeds[i]] = CRGB ( 0, 0, 255);
     FastLED.show();
     delay(50);
   }
   for (int i = RGB_LED_NUM; i >= 0; i--) {
-    LEDs[i] = CRGB ( 0, 255, 0);
+    LEDs[mappedLeds[i]] = CRGB ( 0, 255, 0);
     FastLED.show();
     delay(50);
   }
   for (int i = 0; i < RGB_LED_NUM; i++) {
-    LEDs[i] = CRGB ( 255, 0, 0);
+    LEDs[mappedLeds[i]] = CRGB ( 255, 0, 0);
     FastLED.show();
     delay(50);
   }
   for (int i = RGB_LED_NUM; i >= 0; i--) {
-    LEDs[i] = CRGB ( 0, 0, 0);
+    LEDs[mappedLeds[i]] = CRGB ( 0, 0, 0);
     FastLED.show();
     delay(50);
   }
@@ -126,7 +146,10 @@ void disable_all_led() {
 }
 
 int lowest_audio_seen = 0;
+unsigned long timeSinceLow = millis();
 int highest_audio_seen = 0;
+unsigned long timeSinceHigh = millis();
+int timeBetweenLowering = 5000;
 int num_per_row = 16;
 int num_cols = 16;
 
@@ -139,6 +162,18 @@ void audio_to_leds() {
     // Read I2S data buffer
     int16_t samples_read = bytesIn / 8;
     // Serial.print("Data:");
+    if (lowest_audio_seen < -200 && (millis() - timeSinceLow) > timeBetweenLowering) {
+      timeSinceLow = millis();
+      lowest_audio_seen += 100;
+      Serial.print("Auto adjusting lowest_audio_seen to: ");
+      Serial.println(lowest_audio_seen);
+    }
+    if (highest_audio_seen > 200 && (millis() - timeSinceHigh) > timeBetweenLowering) {
+      timeSinceHigh = millis();
+      highest_audio_seen -= 100;
+      Serial.print("Auto adjusting highest_audio_seen to: ");
+      Serial.println(highest_audio_seen);
+    }
     if (samples_read > 0) {
       for (int16_t i = 0; i < samples_read; i++) {
         if (sBuffer[i] < lowest_audio_seen) {
@@ -213,7 +248,7 @@ void audio_to_leds() {
           if (audioValue < 10) {
             audioValue = 0;
           }
-          LEDs[ledId] = CRGB(audioValue, audioValue, audioValue);
+          LEDs[mappedLeds[ledId]] = CRGB(audioValue, audioValue, audioValue);
         }
       }
 
@@ -399,6 +434,8 @@ void setup() {
 
   // Init Panel
   // https://www.makerguides.com/how-to-control-ws2812b-individually-addressable-leds-using-arduino/
+
+  map_leds();
   Serial.println("WS2812B LEDs strip Initialize");
   Serial.println("Please enter the 1 to 6 value.....Otherwise no any effect show");
   FastLED.addLeds<CHIP_SET, RGB_PIN, COLOR_CODE>(LEDs, RGB_LED_NUM);
@@ -407,6 +444,7 @@ void setup() {
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
   FastLED.clear();
   FastLED.show();
+  // r_g_b();
 
   // Init Mic
   // https://dronebotworkshop.com/esp32-i2s/
@@ -560,6 +598,7 @@ void loop() {
     case 1:
       // Mode 1 - Solid white
       light_up_white();
+      // r_g_b();
       break;
     case 2:
       // Mode 2 - Audio
