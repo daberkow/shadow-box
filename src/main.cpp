@@ -130,7 +130,6 @@ void r_g_b() {
 }
 
 void light_up_white() {
-  Serial.println("Lighting White");
   for (int i = 0; i < RGB_LED_NUM; i++) {
     LEDs[i] = CRGB( BRIGHTNESS, BRIGHTNESS, BRIGHTNESS);
   }
@@ -138,7 +137,6 @@ void light_up_white() {
 }
 
 void disable_all_led() {
-  Serial.println("Lighting White");
   for (int i = 0; i < RGB_LED_NUM; i++) {
     LEDs[i] = CRGB( 0, 0, 0);
   }
@@ -161,7 +159,7 @@ void audio_to_leds() {
   if (result == ESP_OK) {
     // Read I2S data buffer
     int16_t samples_read = bytesIn / 8;
-    // Serial.print("Data:");
+    Serial.print("Data:");
     if (lowest_audio_seen < -200 && (millis() - timeSinceLow) > timeBetweenLowering) {
       timeSinceLow = millis();
       lowest_audio_seen += 100;
@@ -186,8 +184,8 @@ void audio_to_leds() {
           Serial.print("Adjusting highest_audio_seen to: ");
           Serial.println(highest_audio_seen);
         }
-        // Serial.print(sBuffer[i]);
-        // Serial.print(",");
+        Serial.print(sBuffer[i]);
+        Serial.print(",");
       }
       // Serial.println(",");
       int lastFullValue = 0;
@@ -201,10 +199,10 @@ void audio_to_leds() {
         if (k % (num_per_row / samples_read) == 0) {
           if (sBuffer[k / (num_per_row / samples_read)] < 0) {
             // Negative value
-            // audioValue = ((sBuffer[k / (num_per_row / samples_read)] / (-1 * lowest_audio_seen)) * BRIGHTNESS);
+            audioValue = ((sBuffer[k / (num_per_row / samples_read)] / (-1 * lowest_audio_seen)) * BRIGHTNESS);
             audioValue = ((sBuffer[k / (num_per_row / samples_read)] * BRIGHTNESS) / ((range / 2) * -1));
           } else {
-            // audioValue = ((sBuffer[k / (num_per_row / samples_read)] / highest_audio_seen) * BRIGHTNESS);
+            audioValue = ((sBuffer[k / (num_per_row / samples_read)] / highest_audio_seen) * BRIGHTNESS);
             audioValue = ((sBuffer[k / (num_per_row / samples_read)] * BRIGHTNESS) / (range / 2));
           }
           lastFullValue = k;
@@ -241,10 +239,10 @@ void audio_to_leds() {
         // Serial.println(audioValue);
         for (int l = 0; l < num_cols; l++) {
           int ledId = k + (l * num_per_row);
-          if (l % 2 == 1) {
-            // Odd rows are the reverse LED order
-            ledId = (((l + 1) * num_per_row) - 1) - k;
-          }
+          // if (l % 2 == 1) {
+          //   // Odd rows are the reverse LED order
+          //   ledId = (((l + 1) * num_per_row) - 1) - k;
+          // }
           if (audioValue < 10) {
             audioValue = 0;
           }
@@ -255,6 +253,126 @@ void audio_to_leds() {
       FastLED.show();
     }
   }
+}
+
+int lowest_audio_seen_array[LEDS_PER_ROW];
+int highest_audio_seen_array[LEDS_PER_ROW];
+float audio_value[LEDS_PER_ROW];
+// int timeBetweenLowering = 5000;
+void audio_to_leds_cols() {
+  // Get I2S data and place in data buffer
+  size_t bytesIn = 0;
+  esp_err_t result = i2s_read(I2S_PORT, &sBuffer, bufferLen, &bytesIn, portMAX_DELAY);
+
+  if (result == ESP_OK) {
+    // Read I2S data buffer
+    int16_t samples_read = bytesIn / 8;
+    // Serial.print("Data:");
+
+    if (samples_read > 0) {
+      for (int i = 0; i < samples_read; i++) {
+        if (lowest_audio_seen_array[i] < -300 && (millis() - timeSinceLow) > timeBetweenLowering) {
+          timeSinceLow = millis();
+          lowest_audio_seen_array[i] += 50;
+          // Serial.print("Auto adjusting lowest_audio_seen_array[i] to: ");
+          // Serial.println(lowest_audio_seen_array[i]);
+        }
+        if (highest_audio_seen_array[i] > 300 && (millis() - timeSinceHigh) > timeBetweenLowering) {
+          timeSinceHigh = millis();
+          highest_audio_seen_array[i] -= 50;
+          // Serial.print("Auto adjusting highest_audio_seen to: ");
+          // Serial.println(highest_audio_seen_array[i]);
+        }
+        if (sBuffer[i] < lowest_audio_seen_array[i]) {
+          lowest_audio_seen_array[i] = sBuffer[i];
+        }
+        if (sBuffer[i] > highest_audio_seen_array[i]) {
+          highest_audio_seen_array[i] = sBuffer[i];
+        }
+      }
+      int lastFullValue = 0;
+      // Looping per row
+      for (int k = 0; k < num_per_row; k++) {
+        // These are direct sampled columns, instead of averages
+        // Sample finder translates the col to the sample id
+        int sampleFinder = k / (num_per_row / samples_read);
+        int range = (lowest_audio_seen_array[sampleFinder] * -1) + highest_audio_seen_array[sampleFinder];
+        float audioValue = 0;
+        if (k % (num_per_row / samples_read) == 0) {
+          if (sBuffer[sampleFinder] < 0) {
+            // Negative value
+            // audioValue = ((sBuffer[sampleFinder] / (-1 * lowest_audio_seen[sampleFinder])) * BRIGHTNESS);
+            audioValue = ((sBuffer[sampleFinder] * BRIGHTNESS) / ((range / 2) * -1));
+          } else {
+            // audioValue = ((sBuffer[sampleFinder] / highest_audio_seen[sampleFinder]) * BRIGHTNESS);
+            audioValue = ((sBuffer[sampleFinder] * BRIGHTNESS) / (range / 2));
+          }
+          lastFullValue = k;
+        } else {
+          float lowerValue = ((sBuffer[k / (num_per_row / samples_read)] * BRIGHTNESS) / (range / 2));
+          if (sBuffer[k / (num_per_row / samples_read)] < 0) {
+            // Negative value
+            lowerValue *= -1;
+          }
+
+          float nextValue = ((sBuffer[(lastFullValue + (num_per_row / samples_read)) / (num_per_row / samples_read)] * BRIGHTNESS) / (range / 2));
+          if (sBuffer[(lastFullValue + (num_per_row / samples_read)) / (num_per_row / samples_read)] < 0) {
+            // Negative value
+            nextValue *= -1;
+          }
+          // float lowerValue = ((sBuffer[lastFullValue / (num_per_row / samples_read)] / (-1 * lowest_audio_seen)) * BRIGHTNESS) / range;
+          // float nextValue = ((sBuffer[(lastFullValue + (num_per_row / samples_read)) / (num_per_row / samples_read)] +  (-1 * lowest_audio_seen)) * BRIGHTNESS) / range;
+          float averageValue = 0;
+          float total_size = (num_per_row / samples_read) / 2;
+          for (int z = 0; z < (num_per_row / samples_read); z++) {
+            if (z < total_size) {
+              averageValue += lowerValue;
+            } else {
+              averageValue += nextValue;
+            }
+          }
+          averageValue /= (num_per_row / samples_read);
+          audioValue = averageValue;
+        }
+
+        // Serial.print("Setting LED ");
+        // Serial.print(k);
+        // Serial.print(" to ");
+        // Serial.println(audioValue);
+        for (int l = (num_per_row - 1); l >= 0; l--) {
+          int ledId = (k * num_per_row) + l;
+          ledId = mappedLeds[ledId];
+
+          // Serial.print("k:");
+          // Serial.print(k);
+          // Serial.print(", value: ");
+          // Serial.println(audio_value[k]);
+
+          if (audioValue < audio_value[k]) {
+            audioValue = (audio_value[k] * 100) / 105;
+          }
+          if (audioValue < 10) {
+            audioValue = 0;
+          }
+          audio_value[k] = audioValue;
+
+          // This is per LED the decay on a LEDs brightness
+          int percentToLower = (l * 100) / num_per_row;
+          float audioValueForThisLed = (audioValue * percentToLower) / 150;
+          // Serial.println(k);
+          // Serial.println(l);
+          // Serial.println(ledId);
+          // Serial.println(audioValueForThisLed);
+          if (ledId != 0) {
+            LEDs[ledId] = CRGB(audioValueForThisLed, audioValueForThisLed, audioValueForThisLed);
+          }
+        }
+      }
+
+      FastLED.show();
+    }
+  }
+  // delay(100);
 }
 
 /*********************
@@ -436,6 +554,12 @@ void setup() {
   // https://www.makerguides.com/how-to-control-ws2812b-individually-addressable-leds-using-arduino/
 
   map_leds();
+  for (int i = 0; i < LEDS_PER_ROW; i++) {
+    lowest_audio_seen_array[i] = 0;
+    highest_audio_seen_array[i] = 0;
+    audio_value[i] = 0;
+  }
+
   Serial.println("WS2812B LEDs strip Initialize");
   Serial.println("Please enter the 1 to 6 value.....Otherwise no any effect show");
   FastLED.addLeds<CHIP_SET, RGB_PIN, COLOR_CODE>(LEDs, RGB_LED_NUM);
@@ -577,12 +701,16 @@ void loop() {
   // Functions for modes that need ations each loop
   switch (mode) {
     case 1:
-      // Mode 1 - Solid white
-      // No action needed
+      // Mode 1 - Column visualizer
+      audio_to_leds_cols();
       break;
     case 2:
       // Mode 2 - Audio
       audio_to_leds();
+      break;
+    case 3:
+      // Mode 3 - Solid White
+      light_up_white();
       break;
   }
 
@@ -596,14 +724,18 @@ void loop() {
   Serial.println(mode);
   switch (mode) {
     case 1:
-      // Mode 1 - Solid white
-      light_up_white();
-      // r_g_b();
+      // Mode 1 - Cols
+      audio_to_leds_cols();
       break;
     case 2:
       // Mode 2 - Audio
       disable_all_led();
       audio_to_leds();
+      break;
+      case 3:
+      // Mode 3 - Solid White
+      Serial.println("Lighting White");
+      light_up_white();
       break;
   }
   lastMode = mode;
@@ -612,5 +744,5 @@ void loop() {
 
   // Mode 4 - Home kit
 
-  delay(500);
+  delay(100);
 }
