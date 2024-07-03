@@ -8,7 +8,7 @@ Controller - A platform.io configuration for a ESP32 micro-controller
 
 kicad      - Kicad wiring diagram
 
-models     - 3d models for the design and parts to hold that up in a standard box
+models     - 3d models for the design and parts to hold that up in a standard box. The models originally are in SolidWorks Makers edition, with STL and a photo of each model
 
 ## Parts Used
 
