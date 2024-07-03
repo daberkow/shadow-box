@@ -151,6 +151,73 @@ int timeBetweenLowering = 5000;
 int num_per_row = 16;
 int num_cols = 16;
 
+// Tue grid starts at the top left, we need to adjust
+int originalArray[RGB_LED_NUM];
+
+int gcd(int a, int b) {
+    if (b == 0)
+        return a;
+    else
+        return gcd(b, a % b);
+}
+
+void leftRotate(int arr[], int d, int n) {
+    int i, j, k, temp;
+    /* To handle if d >= n */
+    d = d % n;
+    int g_c_d = gcd(d, n);
+    for (i = 0; i < g_c_d; i++) {
+        /* move i-th values of blocks */
+        temp = arr[i];
+        j = i;
+        while (1) {
+            k = j + d;
+            if (k >= n)
+                k = k - n;
+            if (k == i)
+                break;
+            arr[j] = arr[k];
+            j = k;
+        }
+        arr[j] = temp;
+    }
+}
+
+
+void setupLedsCorrectOrder() {
+  // for (int i = 0; i < num_cols; i++) {
+  //   for (int k = 0; k < num_per_row; k++) {
+  //     LEDs[k * num_per_row] = originalArray[k + (k * i)];
+  //   }
+  // }
+  // leftRotate(originalArray, num_per_row, RGB_LED_NUM);
+  for (int k = 0; k < num_per_row; k++) {
+    for (int l = 0; l < num_cols; l++) {
+      int ledId = k + (l * num_per_row);
+      if (l % 2 == 1) {
+        // Odd rows are the reverse LED order
+        ledId = (((l + 1) * num_per_row) - 1) - k;
+      }
+      //  = audioValue;
+      LEDs[ledId] = CRGB( originalArray[l + (k * num_per_row)], originalArray[l + (k * num_per_row)], originalArray[l + (k * num_per_row)]);
+    }
+  }
+  // for (int i = 0; i < RGB_LED_NUM; i++) {
+  //   LEDs[i] = CRGB( originalArray[i], originalArray[i], originalArray[i]);
+  // }
+  // for (int i = 0; i < num_cols; i++) {
+  //   for (int k = 0; k < num_per_row; k++) {
+  //     // if (k % 2 == 0) {
+  //     //   LEDs[(i * k) + k] = CRGB( originalArray[k][i], originalArray[k][i], originalArray[k][i]);
+  //     // } else {
+  //     //   LEDs[ (((k + 1) * num_per_row) - 1) - i] = CRGB( originalArray[k][i], originalArray[k][i], originalArray[k][i]);
+  //     // }
+  //     LEDs[(i * k) + k] = CRGB( originalArray[i][k], originalArray[i][k], originalArray[i][k]);
+  //   }
+  // }
+}
+
+
 void audio_to_leds() {
   // Get I2S data and place in data buffer
   size_t bytesIn = 0;
@@ -184,8 +251,8 @@ void audio_to_leds() {
           Serial.print("Adjusting highest_audio_seen to: ");
           Serial.println(highest_audio_seen);
         }
-        Serial.print(sBuffer[i]);
-        Serial.print(",");
+        // Serial.print(sBuffer[i]);
+        // Serial.print(",");
       }
       // Serial.println(",");
       int lastFullValue = 0;
@@ -248,8 +315,9 @@ void audio_to_leds() {
           }
           LEDs[mappedLeds[ledId]] = CRGB(audioValue, audioValue, audioValue);
         }
-      }
 
+      }
+      setupLedsCorrectOrder();
       FastLED.show();
     }
   }
